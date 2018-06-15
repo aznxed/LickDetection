@@ -26,36 +26,35 @@ DEBUG = False
 p = psutil.Process(os.getpid())
 p.nice(psutil.HIGH_PRIORITY_CLASS)
 
+#Class with all experiment variables
 class ConfigOptions:
     def __init__(
-            self,
-            color="Blue",
-            numTrials=1,
-            licks=5,
-            reward=1,
-            lickTime=2000,
-            lightTime=100,
-            catchRatio=.5,
-            itiTime=2000,
-            maxIti=3,
-            logLocation=getcwd()
+    self,
+    experiment=[1,2000,2000,3],
+    stimulus=["Green","Green",100,1],
+    reward=[5,1,.5],
+    logLocation=getcwd()
     ):
-            self.color = color
-            self.numTrials = numTrials
-            self.licks = licks
-            self.reward = reward
-            self.lightTime = lightTime
-            self.lickTime = lickTime
-            self.catchRatio = catchRatio
-            self.itiTime = itiTime
-            self.maxIti = maxIti
-            self.logLocation = logLocation
+        self.numTrials=experiment[0]
+        self.lickTime=experiment[1]
+        self.itiTime=experiment[2]
+        self.maxIti=experiment[3]
+        self.leftColor=stimulus[0]
+        self.rightColor=stimulus[1]
+        self.stimulusTime=stimulus[2]
+        self.stimulusIntensity=stimulus[3]
+        self.licks=reward[0]
+        self.rewardSize=reward[1]
+        self.catchRatio=reward[2]
+        self.logLocation=logLocation
 
 
+#Waits for a given amount of milliseconds
 def wait(lengthMS):
     s = clock()
     while (clock() - s) * 1000 < lengthMS:
         pass
+
 
 def setThresh():
 	global lickSense
@@ -68,6 +67,7 @@ def setThresh():
 	return mean*.95
 
 
+#Opens Tkinter using fedit and returns options as a ConfigOptions object
 def setUpMenu():
 
     Tk().withdraw()
@@ -78,19 +78,33 @@ def setUpMenu():
     except (IOError, EOFError, pickle.PickleError):
     	options = ConfigOptions()
 
-    menuData = [
-    	('Color',[options.color,'Green','Blue']),
-    	('Number of trials',options.numTrials),
-    	('Number of licks for reward',options.licks),
-    	('Reward Size (mL)',options.reward),
-    	('Lick Time (ms)',options.lickTime),
-    	('Stimulus Length (ms)',options.lightTime),
-    	('Reward %',[str(options.catchRatio),'0.00','0.25','0.5','0.75','1.00']),
-        ('Intertrial Interval Time',options.itiTime),
-        ('Max Number of ITI', options.maxIti)
+    experimentOptions = [
+        ('Number of trials',options.numTrials),
+        ('Lick Time (ms)',options.lickTime),
+        ('ITI Time (ms)',options.itiTime),
+        ('Max Number of ITI',options.maxIti),
     ]
 
-    newData = fedit(menuData,title="LED Stimulus Options")
+    stimulusOptions = [
+        ('Left Stimulus Color',[options.leftColor,'Green','Blue']),
+        ('Right Stimulus Color',[options.rightColor,'Green','Blue']),
+        ('Stimulus Duration',options.stimulusTime),
+        ('Stimulus Intensity',options.stimulusIntensity),
+    ]
+
+    rewardOptions = [
+        ('Number of licks for reward',options.licks),
+        ('Reward Size (mL)',options.rewardSize),
+        ('Reward %',[str(options.catchRatio),'0.00','0.25','0.5','0.75','1.00'])
+    ]
+
+
+
+    newData = fedit(((experimentOptions, "Experiment", ""),
+                            (stimulusOptions, "Stimulus", ""),
+                            (rewardOptions, "Reward", "")),
+                            "Experiment Settings")
+
     if newData is None:
     	exit()
 
@@ -109,7 +123,7 @@ def setUpLogger(options):
     logger = logging.getLogger('LEDStim')
     return logger
 
-
+#Sets up Arduino and pins for reading
 def setUpArduino(options):
     global rLED
     global lLED
@@ -143,12 +157,16 @@ def setUpArduino(options):
 
     rLED = greenLEDRight
     lLED = greenLEDLeft
-    if options.color == "Blue":
-    	rLED = blueLEDRight
-    	lLED = blueLEDLeft
+
+    if options.leftColor == "Blue":
+        lLED = blueLEDRight
+    if options.rightColor == "Blue":
+        rLED = blueLEDLeft
 
     return connectedDevice, rLED, lLED
 
+#Writes to a log file as well as graphs to plt
+#TODO startTime can be removed as a global as it is constant
 
 def logData(data, file):
     global startTime
@@ -173,6 +191,7 @@ def logData(data, file):
         plt.axvspan(t,t+options.itiTime, facecolor='b', ymax=.75, alpha=.5)
 
 
+#Fires a light stimlus with specified left and right colors
 def stimulus(rLED, lLED, logFile, options, intensity=1):
 	logData("Stimulus on with intensity "+str(intensity),logFile)
 	rLED.write(intensity)
@@ -183,13 +202,15 @@ def stimulus(rLED, lLED, logFile, options, intensity=1):
 	logData("Stimulus off",logFile)
 
 
+#Waits for licks
 def waitForLicks(options):
     global sensing
     sensing = True
     wait(options.lickTime)
     sensing = False
 
-
+#Waits for licks in the intertrial interval
+#TODO Waiting in the ITI and non-ITI can be consolidated into one function
 def waitForLicksITI(options):
     global sensing
     sensing = True
@@ -197,6 +218,7 @@ def waitForLicksITI(options):
     sensing = False
 
 
+#Lick event occurs when a voltage threshold is reached
 def lick(logFile):
     global licks
     global sensing
@@ -206,7 +228,7 @@ def lick(logFile):
     if sensing:
         licks += 1
 
-
+#Give a reward of the given size
 def giveReward():
 	global options
 	global rewardPin
@@ -217,6 +239,7 @@ def giveReward():
 	rewardPin.write(0)
 
 
+#Experiment Logic
 def runExp(options, logFile):
     global startTime
     global lickThreadRun
@@ -225,10 +248,12 @@ def runExp(options, logFile):
     global lLED
     global interTrial
 
+    #Start the clock and begin to run the selected number of trials
     startTime = clock()
     for trial in range(options.numTrials):
         sleep(1)
 
+        #Percent chance of a catch trial vs reward trial
         if random.random() > float(options.catchRatio):
             reward = False
             logData("(Catch) Start Trial " +str(trial),logFile)
@@ -241,6 +266,8 @@ def runExp(options, logFile):
         stimulus(rLED, lLED, logFile, options)
         waitForLicks(options)
 
+        #If it is a reward trial, give reward if number of licks is reached and no additional licks
+        #TODO If it is a catch trial, do we still do into ITI?
         if reward:
             if licks >= options.licks:
                 #giveReward()
@@ -251,13 +278,15 @@ def runExp(options, logFile):
     lickThreadRun = False
 
 
-def writeLick(data, options):
+#Writes voltage to a file
+def writeVoltage(data, options):
 	if len(data) != 2:
 		return
 	with open(options.logLocation[:-4]+".lick.log", 'a') as fp:
 		fp.write(str(data[0])+','+str(data[1])+'\n')
 
 
+#Lick thread reads from the Arduino and if voltage drops, a lick event is started
 def lickDetect(options):
     global lickSense
     global lickData
@@ -273,7 +302,7 @@ def lickDetect(options):
         t = clock()
         new = lickSense.read()
         if new is not None and old is not None and startTime >= 0:
-            writeLick([t-startTime,new], options)
+            writeVoltage([t-startTime,new], options)
             lickData[0].append(t-startTime)
             lickData[1].append(new)
             if old-new > .2:
@@ -281,28 +310,30 @@ def lickDetect(options):
         old = new
 
 
+#Intertrial Interval
 def interTrial(options):
     global licks
     global logFile
     additionalLick = True
-    numITI = 0
+    numITI = 1
     maxIti = options.maxIti
 
-    while(additionalLick and numITI < maxIti):
-        numITI = numITI + 1
+    #ITI until there are no additional licks or until the max number of ITI is reached
+    while(additionalLick and numITI <= maxIti):
         logData("Intertrial " +str(numITI),logFile)
         print("Enter ITI " + str(numITI))
         newLick = licks
         waitForLicksITI(options)
         oldLick = licks
-
+        numITI+=1
+        #If there are no additional licks, break out of the loop
         if(newLick == oldLick):
             additionalLick = False
             print("No additional licks")
             break
         print("Additional Lick detected")
 
-    if(numITI == maxIti):
+    if(numITI > maxIti):
         print("Max ITI reached")
 
 
@@ -312,6 +343,8 @@ def logHandle(type, val, tb):
 sys.excepthook = logHandle
 
 
+#Main thread is responsible for starting experiment thread and lick thread
+#While they are running, graph the results
 def main():
     global startTime
     global rLED

@@ -10,10 +10,11 @@ If that max is exceeded, we proceed to the next trial.
 ## Requirements
 - This application was built using **Python 2.7** and was not tested on Python3. 
 - Standard Firmata must be installed on the Arduino. Learn more about [installing standard firmata](http://www.instructables.com/id/Arduino-Installing-Standard-Firmata/)
-- FormLayout
+- FormLayout. Found [here](https://github.com/PierreRaybaut/formlayout)
 - Matplotlib
 
 ## GUI
+
 
 ## Threads 
 ### Main Thread
@@ -24,3 +25,7 @@ The lick thread deals with reading voltages from the Arduino and storing them. W
 
 ### Experiment Thread
 The experiment thread deals with the experiment logic, i.e(how many trials to run, intertrial logic).
+
+## Improvement
+- Imrpove GUI by adding tabs to make it easier to understand and organize variables
+- Remove as many global variables to improve performance 

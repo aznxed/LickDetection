@@ -102,8 +102,3 @@ venv.bak/
 
 # mypy
 .mypy_cache/
-
-AdvancedForm.py
-*.lick
-test.py
-TestingGUI.py
